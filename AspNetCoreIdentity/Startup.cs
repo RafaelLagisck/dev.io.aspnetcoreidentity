@@ -1,8 +1,6 @@
-﻿using AspNetCoreIdentity.Areas.Identity.Data;
+﻿using AspNetCoreIdentity.Config;
 using AspNetCoreIdentity.Extensions;
-using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Identity;
-using Microsoft.EntityFrameworkCore;
+using KissLog.AspNetCore;
 
 namespace AspNetCoreIdentity
 {
@@ -11,38 +9,37 @@ namespace AspNetCoreIdentity
 
         public IConfiguration Configuration { get; }
 
-        public Startup(IConfiguration configuration)
+        public Startup(IWebHostEnvironment hostEnvironment)
         {
-            Configuration = configuration;
+            var builder = new ConfigurationBuilder()
+                .SetBasePath(hostEnvironment.ContentRootPath)
+                .AddJsonFile(path:"appsettings.json",optional:true,reloadOnChange:true)
+                .AddJsonFile(path:$"appsettings.{hostEnvironment.EnvironmentName}.json", optional:true, reloadOnChange:true)
+                .AddEnvironmentVariables();
+
+            if(hostEnvironment.IsProduction())
+            {
+                builder.AddUserSecrets<Startup>();
+            }
+
+            Configuration = builder.Build();
 
         }
 
         public void ConfigureServices(IServiceCollection services)
         {
-            services.AddDbContext<AspNetCoreIdentityContext>(options =>
-                options.UseSqlServer(Configuration.GetConnectionString("AspNetCoreIdentityContextConnection")));
+            services.AddIdentityConfig(Configuration);
 
-            //Roles
-            services.AddDefaultIdentity<IdentityUser>()
-                .AddRoles<IdentityRole>()
-                .AddDefaultUI()
-                .AddEntityFrameworkStores<AspNetCoreIdentityContext>();
+            services.AddAuthorizationConfig(); 
 
-            //Claims
-            services.AddAuthorization(options =>
-            {
-                options.AddPolicy(name: "PodeExcluir", configurePolicy: policy => policy.RequireClaim("PodeExcluir"));
-
-                options.AddPolicy(name: "PodeLer", configurePolicy: policy => policy.Requirements.Add(new PermissaoNecessaria("PodeLer")));
-
-                options.AddPolicy(name: "PodeEscrever", configurePolicy: policy => policy.Requirements.Add(new PermissaoNecessaria("PodeEscrever")));
-
-            });
-
-            services.AddSingleton<IAuthorizationHandler, PermissaoNecessariaHandler>();
-
+            services.ResolveDependencies();
 
             services.AddControllersWithViews();
+
+            services.AddMvc().AddMvcOptions(options =>
+            {
+                options.Filters.Add(typeof(AuditoriaFilter));
+            });
         }
 
         public void Configure(WebApplication app, IWebHostEnvironment env)
@@ -51,10 +48,21 @@ namespace AspNetCoreIdentity
             {
                 app.UseDeveloperExceptionPage();
             }
+            else 
+            {
+                app.UseExceptionHandler("/erro/500");
+                app.UseStatusCodePagesWithRedirects("/erro/{0}");
+                app.UseHsts();
+            }
 
             app.UseStaticFiles();
             app.UseAuthentication();
             app.UseAuthorization();
+
+            app.UseKissLogMiddleware(options => {
+                LogConfig.ConfigureKissLog(options, Configuration);
+            });
+
 
             app.MapControllerRoute(
                 name: "default",

@@ -9,7 +9,7 @@ var builder = WebApplication.CreateBuilder(args);
     options.UseSqlServer(connectionString));builder.Services.AddDefaultIdentity<IdentityUser>(options => options.SignIn.RequireConfirmedAccount = true)
     .AddEntityFrameworkStores<AspNetCoreIdentityContext>();*/
 
-var startup = new Startup(builder.Configuration);
+var startup = new Startup(builder.Environment);
 
 startup.ConfigureServices(builder.Services);
 
